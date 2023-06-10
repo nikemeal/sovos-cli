@@ -12,7 +12,9 @@ The .env.example file contains all the necessary endpoint names already, but wil
 the send command will prepare and send the record to the Sovos receiving queue ready to be processed.  At present only the `invoice` record type is available.
 
 it also takes in a minified json string enclosed in quotes.  the struct in the repo shows the fields mapped and can be customised, but this is the minimum required fields for a record to be accepted in the Sovos system (example below)
+
 &nbsp;
+
 `-getmessages`
 
 the `getmessages` flag will retrieve all messages on the currently selecte Sovos queue (defined by your environment variable).  Each message will be in the format of MessageId, Sender and Receiver
@@ -23,7 +25,9 @@ the `getmessages` flag will retrieve all messages on the currently selecte Sovos
     "Sender": "565656565656"
 },
 ```
+
 &nbsp;
+
 `-getmessage {message_id}`
 
 passing a message ID (like the one above) to this flag will attempt to retrieve the details of that specific message.  You are given the option of either returning the raw payload:
@@ -36,15 +40,21 @@ passing a message ID (like the one above) to this flag will attempt to retrieve 
 }
 ```
 or just the decoded data inside the `Base64Data` field which will be an XML structured result detailing any errors with the data that was sent or any successful response IDs
+
 &nbsp;
+
 `-processmessage {message_id}`
 
 passing the message ID to this flag will indicate to Sovos that the message has been retrieved and is safe to remove from their queue.  Only use this once you have retrieved the data inside the message as once it is removed from the queue you're unable to get it back
+
 &nbsp;
+
 `-clearmessages`
 
 this flag will attempt to clear all outstanding messages on the current queue.  You are given a warning and notice of which queue will be cleared.  Choosing to continue will display each message that is cleared as they are set to processed.
+
 &nbsp;
+
 `-decode 'base_64_string_goes_here'`
 
 this is a deprecated flag (now included as an option in the `getmessage` flag) but is left here in case it's useful.  pass a base64 encoded string (in quotes) here and get the decoded version output to the terminal
