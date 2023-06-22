@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 
+	_ "embed"
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/manifoldco/promptui"
@@ -68,7 +69,12 @@ type invoice struct {
 		GrossPrice                float64 `json:"grossPrice" xml:"grossPrice"`
 		GrossLineAmount           float64 `json:"grossLineAmount" xml:"grossLineAmount"`
 		LineTotalPayableAmount    float64 `json:"lineTotalPayableAmount" xml:"lineTotalPayableAmount"`
-		Quantity                  struct {
+		LineTotalDiscountAmount   float64 `json:"lineTotalDiscountAmount" xml:"lineTotalDiscountAmount"`
+		LineDiscount              *struct {
+			DiscountPercentage float64 `json:"discountPercentage" xml:"discountPercentage"`
+			DiscountAmount     float64 `json:"discountAmount" xml:"discountAmount"`
+		} `json:"lineDiscount,omitempty" xml:"lineDiscount,omitempty"`
+		Quantity struct {
 			Value         int    `json:"value" xml:"value"`
 			UnitCodeValue string `json:"unitCodeValue" xml:"unitCodeValue"`
 		} `json:"quantity" xml:"quantity"`
@@ -85,6 +91,7 @@ type invoice struct {
 		TotalVatAmount        float64 `json:"totalVatAmount" xml:"totalVatAmount"`
 		TotalGrossAmount      float64 `json:"totalGrossAmount" xml:"totalGrossAmount"`
 		TotalNetAmount        float64 `json:"totalNetAmount" xml:"totalNetAmount"`
+		TotalDiscountAmount   float64 `json:"totalDiscountAmount,omitempty" xml:"totalDiscountAmount,omitempty"`
 		VatSummary            struct {
 			TaxPercentage float64 `json:"taxPercentage" xml:"taxPercentage"`
 			TaxTotalValue float64 `json:"taxTotalValue" xml:"taxTotalValue"`
@@ -116,6 +123,11 @@ type MessageBodyObject struct {
 	Base64Data string `json:"Base64Data,omitempty"`
 }
 
+var (
+	//go:embed test.json
+	_payload []byte
+)
+
 func main() {
 	var payloadType string
 	var jsonString string
@@ -137,7 +149,7 @@ func main() {
 	flag.Parse()
 
 	if payloadType != "" {
-		jsonString = flag.Arg(0)
+		jsonString = string(_payload)
 		if jsonString == "" {
 			log.Fatal("No JSON string provided")
 		}
@@ -196,6 +208,7 @@ func sendMessage(payloadType string, jsonString string) {
 			panic(err)
 		}
 		fileName = payload.Invoice.References.ThirdPartyErpInternalReference
+
 		xmlData, err = xml.MarshalIndent(payload.Invoice, "", " ")
 		if err != nil {
 			panic(err)
