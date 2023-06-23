@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	_ "embed"
+
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/manifoldco/promptui"
@@ -29,8 +30,10 @@ type invoice struct {
 	DocPlatform   string `json:"@_docPlatform" xml:"docPlatform,attr"`
 	Serie         string `json:"@_serie" xml:"serie,attr"`
 	CurrencyISO   string `json:"currencyISOCode" xml:"currencyISOCode"`
+	DocumentRectificationPurpose   string `json:"documentRectificationPurpose,omitempty" xml:"documentRectificationPurpose,omitempty"`
 	References    struct {
-		ThirdPartyErpInternalReference string `json:"thirdPartyErpInternalReference"`
+		ThirdPartyErpInternalReference string `json:"thirdPartyErpInternalReference" xml:"thirdPartyErpInternalReference"`
+		InvoiceReference int64 `json:"invoiceReference,omitempty" xml:"invoiceReference,omitempty"`
 	} `json:"documentReferences" xml:"documentReferences"`
 	Dates struct {
 		DocumentDate              string `json:"documentDate" xml:"documentDate"`
@@ -124,12 +127,12 @@ type MessageBodyObject struct {
 }
 
 var (
-	//go:embed test.json
+	//go:embed payload.json
 	_payload []byte
 )
 
 func main() {
-	var payloadType string
+	var sendPayload bool
 	var jsonString string
 	var getMessages bool
 	var clearMessages bool
@@ -140,7 +143,8 @@ func main() {
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	flag.StringVar(&payloadType, "send", "", "Type of message to send")
+	flag.BoolVar(&sendPayload, "send", false, "Send a payload to the queue")
+	flag.StringVar(&jsonString, "payload", "", "JSON string of a payload to send to the queue")
 	flag.BoolVar(&getMessages, "getmessages", false, "Get all message IDs")
 	flag.BoolVar(&clearMessages, "clearmessages", false, "Clear all messages in the queue")
 	flag.StringVar(&getMessageId, "getmessage", "", "Get message by ID")
@@ -148,12 +152,11 @@ func main() {
 
 	flag.Parse()
 
-	if payloadType != "" {
-		jsonString = string(_payload)
+	if sendPayload {
 		if jsonString == "" {
-			log.Fatal("No JSON string provided")
+			jsonString = string(_payload)
 		}
-		sendMessage(payloadType, jsonString)
+		sendMessage(jsonString)
 	} else if getMessages {
 		messages := getAllMessages()
 		messageJSON, err := json.MarshalIndent(messages, "", "  ")
@@ -196,26 +199,20 @@ func decodePayloadReseponse(base64String string) string {
 	return string(decoded)
 }
 
-func sendMessage(payloadType string, jsonString string) {
+func sendMessage(jsonString string) {
 	var xmlData []byte
 	var err error
 	var fileName string
 
-	switch payloadType {
-	case "invoice":
-		payload := Object{}
-		if err := json.Unmarshal([]byte(jsonString), &payload); err != nil {
-			panic(err)
-		}
-		fileName = payload.Invoice.References.ThirdPartyErpInternalReference
+	payload := Object{}
+	if err := json.Unmarshal([]byte(jsonString), &payload); err != nil {
+		panic(err)
+	}
+	fileName = payload.Invoice.References.ThirdPartyErpInternalReference
 
-		xmlData, err = xml.MarshalIndent(payload.Invoice, "", " ")
-		if err != nil {
-			panic(err)
-		}
-	default:
-		fmt.Println("Unknown payload type")
-		os.Exit(1)
+	xmlData, err = xml.MarshalIndent(payload.Invoice, "", " ")
+	if err != nil {
+		panic(err)
 	}
 
 	xmlPayload := fmt.Sprintf("%s%s", "", xmlData)
