@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	_ "embed"
 
@@ -24,16 +25,16 @@ type Object struct {
 }
 
 type invoice struct {
-	CorrelationID string `json:"@_documentCorrelationId" xml:"documentCorrelationId,attr"`
-	DocTypeID     string `json:"@_docTypeId" xml:"docTypeId,attr"`
-	DocInstanceID int64  `json:"@_docInstanceId" xml:"docInstanceId,attr"`
-	DocPlatform   string `json:"@_docPlatform" xml:"docPlatform,attr"`
-	Serie         string `json:"@_serie" xml:"serie,attr"`
-	CurrencyISO   string `json:"currencyISOCode" xml:"currencyISOCode"`
-	DocumentRectificationPurpose   string `json:"documentRectificationPurpose,omitempty" xml:"documentRectificationPurpose,omitempty"`
-	References    struct {
+	CorrelationID                string `json:"@_documentCorrelationId" xml:"documentCorrelationId,attr"`
+	DocTypeID                    string `json:"@_docTypeId" xml:"docTypeId,attr"`
+	DocInstanceID                int64  `json:"@_docInstanceId" xml:"docInstanceId,attr"`
+	DocPlatform                  string `json:"@_docPlatform" xml:"docPlatform,attr"`
+	Serie                        string `json:"@_serie" xml:"serie,attr"`
+	CurrencyISO                  string `json:"currencyISOCode" xml:"currencyISOCode"`
+	DocumentRectificationPurpose string `json:"documentRectificationPurpose,omitempty" xml:"documentRectificationPurpose,omitempty"`
+	References                   struct {
 		ThirdPartyErpInternalReference string `json:"thirdPartyErpInternalReference" xml:"thirdPartyErpInternalReference"`
-		InvoiceReference int64 `json:"invoiceReference,omitempty" xml:"invoiceReference,omitempty"`
+		InvoiceReference               int64  `json:"invoiceReference,omitempty" xml:"invoiceReference,omitempty"`
 	} `json:"documentReferences" xml:"documentReferences"`
 	Dates struct {
 		DocumentDate              string `json:"documentDate" xml:"documentDate"`
@@ -138,6 +139,7 @@ func main() {
 	var clearMessages bool
 	var getMessageId string
 	var processMessageId string
+	var monitorQueue bool
 
 	err := godotenv.Load()
 	if err != nil {
@@ -149,6 +151,7 @@ func main() {
 	flag.BoolVar(&clearMessages, "clearmessages", false, "Clear all messages in the queue")
 	flag.StringVar(&getMessageId, "getmessage", "", "Get message by ID")
 	flag.StringVar(&processMessageId, "processmessage", "", "Process message by ID")
+	flag.BoolVar(&monitorQueue, "monitor", false, "Monitor the queue for any new messages")
 
 	flag.Parse()
 
@@ -184,6 +187,8 @@ func main() {
 		}
 	} else if clearMessages {
 		clearAllMessages()
+	} else if monitorQueue {
+		monitor()
 	} else {
 		fmt.Println("Invalid arguments")
 		flag.Usage()
@@ -365,6 +370,20 @@ func clearAllMessages() {
 			fmt.Printf("Failed to clear message %s from the queue\n", message.ID)
 		} else {
 			fmt.Printf("Message %s cleared from the queue\n", message.ID)
+		}
+	}
+}
+
+func monitor() {
+	currentMessageCount := len(getAllMessages().Results.Messages)
+	fmt.Printf("Monitoring queue - currently %d message/s in the queue\n", currentMessageCount)
+	for {
+		time.Sleep(5 * time.Second)
+		newMessageCount := len(getAllMessages().Results.Messages)
+		if newMessageCount != currentMessageCount {
+			fmt.Printf("%d new message/s found on the queue\n", newMessageCount-currentMessageCount)
+			currentMessageCount = newMessageCount
+			fmt.Printf("Monitoring queue - currently %d message/s in the queue\n", currentMessageCount)
 		}
 	}
 }
