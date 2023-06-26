@@ -11,8 +11,10 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	_ "embed"
+
 	"github.com/google/uuid"
 	"github.com/joho/godotenv"
 	"github.com/manifoldco/promptui"
@@ -23,14 +25,16 @@ type Object struct {
 }
 
 type invoice struct {
-	CorrelationID string `json:"@_documentCorrelationId" xml:"documentCorrelationId,attr"`
-	DocTypeID     string `json:"@_docTypeId" xml:"docTypeId,attr"`
-	DocInstanceID int64  `json:"@_docInstanceId" xml:"docInstanceId,attr"`
-	DocPlatform   string `json:"@_docPlatform" xml:"docPlatform,attr"`
-	Serie         string `json:"@_serie" xml:"serie,attr"`
-	CurrencyISO   string `json:"currencyISOCode" xml:"currencyISOCode"`
-	References    struct {
-		ThirdPartyErpInternalReference string `json:"thirdPartyErpInternalReference"`
+	CorrelationID                string `json:"@_documentCorrelationId" xml:"documentCorrelationId,attr"`
+	DocTypeID                    string `json:"@_docTypeId" xml:"docTypeId,attr"`
+	DocInstanceID                int64  `json:"@_docInstanceId" xml:"docInstanceId,attr"`
+	DocPlatform                  string `json:"@_docPlatform" xml:"docPlatform,attr"`
+	Serie                        string `json:"@_serie" xml:"serie,attr"`
+	CurrencyISO                  string `json:"currencyISOCode" xml:"currencyISOCode"`
+	DocumentRectificationPurpose string `json:"documentRectificationPurpose,omitempty" xml:"documentRectificationPurpose,omitempty"`
+	References                   struct {
+		ThirdPartyErpInternalReference string `json:"thirdPartyErpInternalReference" xml:"thirdPartyErpInternalReference"`
+		InvoiceReference               int64  `json:"invoiceReference,omitempty" xml:"invoiceReference,omitempty"`
 	} `json:"documentReferences" xml:"documentReferences"`
 	Dates struct {
 		DocumentDate              string `json:"documentDate" xml:"documentDate"`
@@ -124,36 +128,38 @@ type MessageBodyObject struct {
 }
 
 var (
-	//go:embed test.json
+	//go:embed payload.json
 	_payload []byte
 )
 
 func main() {
-	var payloadType string
+	var sendPayload bool
 	var jsonString string
 	var getMessages bool
 	var clearMessages bool
 	var getMessageId string
 	var processMessageId string
+	var monitorQueue bool
 
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
-	flag.StringVar(&payloadType, "send", "", "Type of message to send")
+	flag.BoolVar(&sendPayload, "send", false, "Send a payload to the queue")
+	flag.StringVar(&jsonString, "payload", "", "JSON string of a payload to send to the queue")
 	flag.BoolVar(&getMessages, "getmessages", false, "Get all message IDs")
 	flag.BoolVar(&clearMessages, "clearmessages", false, "Clear all messages in the queue")
 	flag.StringVar(&getMessageId, "getmessage", "", "Get message by ID")
 	flag.StringVar(&processMessageId, "processmessage", "", "Process message by ID")
+	flag.BoolVar(&monitorQueue, "monitor", false, "Monitor the queue for any new messages")
 
 	flag.Parse()
 
-	if payloadType != "" {
-		jsonString = string(_payload)
+	if sendPayload {
 		if jsonString == "" {
-			log.Fatal("No JSON string provided")
+			jsonString = string(_payload)
 		}
-		sendMessage(payloadType, jsonString)
+		sendMessage(jsonString)
 	} else if getMessages {
 		messages := getAllMessages()
 		messageJSON, err := json.MarshalIndent(messages, "", "  ")
@@ -181,6 +187,8 @@ func main() {
 		}
 	} else if clearMessages {
 		clearAllMessages()
+	} else if monitorQueue {
+		monitor()
 	} else {
 		fmt.Println("Invalid arguments")
 		flag.Usage()
@@ -196,26 +204,20 @@ func decodePayloadReseponse(base64String string) string {
 	return string(decoded)
 }
 
-func sendMessage(payloadType string, jsonString string) {
+func sendMessage(jsonString string) {
 	var xmlData []byte
 	var err error
 	var fileName string
 
-	switch payloadType {
-	case "invoice":
-		payload := Object{}
-		if err := json.Unmarshal([]byte(jsonString), &payload); err != nil {
-			panic(err)
-		}
-		fileName = payload.Invoice.References.ThirdPartyErpInternalReference
+	payload := Object{}
+	if err := json.Unmarshal([]byte(jsonString), &payload); err != nil {
+		panic(err)
+	}
+	fileName = payload.Invoice.References.ThirdPartyErpInternalReference
 
-		xmlData, err = xml.MarshalIndent(payload.Invoice, "", " ")
-		if err != nil {
-			panic(err)
-		}
-	default:
-		fmt.Println("Unknown payload type")
-		os.Exit(1)
+	xmlData, err = xml.MarshalIndent(payload.Invoice, "", " ")
+	if err != nil {
+		panic(err)
 	}
 
 	xmlPayload := fmt.Sprintf("%s%s", "", xmlData)
@@ -368,6 +370,20 @@ func clearAllMessages() {
 			fmt.Printf("Failed to clear message %s from the queue\n", message.ID)
 		} else {
 			fmt.Printf("Message %s cleared from the queue\n", message.ID)
+		}
+	}
+}
+
+func monitor() {
+	currentMessageCount := len(getAllMessages().Results.Messages)
+	fmt.Printf("Monitoring queue - currently %d message/s in the queue\n", currentMessageCount)
+	for {
+		time.Sleep(5 * time.Second)
+		newMessageCount := len(getAllMessages().Results.Messages)
+		if newMessageCount != currentMessageCount {
+			fmt.Printf("%d new message/s found on the queue\n", newMessageCount-currentMessageCount)
+			currentMessageCount = newMessageCount
+			fmt.Printf("Monitoring queue - currently %d message/s in the queue\n", currentMessageCount)
 		}
 	}
 }
